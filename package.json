@@ -1,0 +1,40 @@
+{
+  "name": "@jspatcher/collab-server",
+  "version": "0.0.1",
+  "description": "Collaborative server for JSPatcher",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --outfile=dist/index.js --bundle --platform=node --sourcemap",
+    "test": "node dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/%40jspatcher/server.git"
+  },
+  "keywords": [
+    "jspatcher",
+    "server"
+  ],
+  "author": "Fr0stbyteR",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/%40jspatcher/server/issues"
+  },
+  "homepage": "https://github.com/%40jspatcher/server#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "@jspatcher/jspatcher": "file:../../jspatcher",
+    "@types/express": "^4.17.13",
+    "@types/ws": "^8.2.0",
+    "@typescript-eslint/eslint-plugin": "^4.31.1",
+    "@typescript-eslint/parser": "^4.31.1",
+    "bson": "^4.5.2",
+    "esbuild": "^0.13.2",
+    "eslint": "^7.32.0",
+    "eslint-config-airbnb-base": "^14.2.1",
+    "eslint-plugin-import": "^2.24.2",
+    "express": "^4.17.1",
+    "typescript": "^4.4.3",
+    "ws": "^8.2.2"
+  }
+}
