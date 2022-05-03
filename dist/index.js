@@ -2393,10 +2393,10 @@ var require_websocket_server = __commonJS({
             process.nextTick(emitClose, this);
           }
         } else {
-          const server = this._server;
+          const server2 = this._server;
           this._removeListeners();
           this._removeListeners = this._server = null;
-          server.close(() => {
+          server2.close(() => {
             emitClose(this);
           });
         }
@@ -2511,18 +2511,18 @@ var require_websocket_server = __commonJS({
       }
     };
     module2.exports = WebSocketServer2;
-    function addListeners(server, map) {
+    function addListeners(server2, map) {
       for (const event of Object.keys(map))
-        server.on(event, map[event]);
+        server2.on(event, map[event]);
       return function removeListeners() {
         for (const event of Object.keys(map)) {
-          server.removeListener(event, map[event]);
+          server2.removeListener(event, map[event]);
         }
       };
     }
-    function emitClose(server) {
-      server._state = CLOSED;
-      server.emit("close");
+    function emitClose(server2) {
+      server2._state = CLOSED;
+      server2.emit("close");
     }
     function socketOnError() {
       this.destroy();
@@ -6941,49 +6941,6 @@ var require_bson = __commonJS({
   }
 });
 
-// src/utils.ts
-var uuid = () => {
-  var _a2;
-  return ((_a2 = globalThis == null ? void 0 : globalThis.crypto) == null ? void 0 : _a2.randomUUID) ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    const v = c === "x" ? r : r & 3 | 8;
-    return v.toString(16);
-  });
-};
-
-// src/Room.ts
-var Room = class {
-  constructor(owner, server, permission, project) {
-    this.id = uuid();
-    this.clients = new Set();
-    this.history = [];
-    this.permission = "read";
-    this.owner = owner;
-    this.server = server;
-    this.permission = permission;
-    this.project = project;
-  }
-  getInfo(clientId) {
-    return {
-      roomId: this.id,
-      permission: this.permission,
-      clients: Array.from(this.clients).map((id) => ({
-        username: this.server.usernames[id],
-        ping: this.server.pings[id],
-        isOwner: id === this.owner
-      })),
-      userIsOwner: clientId === this.owner
-    };
-  }
-  hasUser(clientId) {
-    return this.clients.has(clientId);
-  }
-  pushEvents(clientId, ...events) {
-    this.history.push(...events);
-    return events;
-  }
-};
-
 // node_modules/ws/wrapper.mjs
 var import_stream = __toModule(require_stream());
 var import_receiver = __toModule(require_receiver());
@@ -6993,6 +6950,16 @@ var import_websocket_server = __toModule(require_websocket_server());
 
 // src/websocket/ProxyServer.ts
 var BSON = __toModule(require_bson());
+
+// src/utils.ts
+var uuid = () => {
+  var _a2;
+  return ((_a2 = globalThis == null ? void 0 : globalThis.crypto) == null ? void 0 : _a2.randomUUID) ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === "x" ? r : r & 3 | 8;
+    return v.toString(16);
+  });
+};
 
 // src/websocket/TimeoutError.ts
 var TimeoutError = class extends Error {
@@ -7037,7 +7004,7 @@ var Server = (_a = class {
         }
       };
       const handleMessage = async (e) => {
-        var _a4, _b2;
+        var _a4, _b2, _c, _d;
         const { target, data } = e;
         (_a4 = this._handleLog) == null ? void 0 : _a4.call(this, { clientId, msg: `Received from 	[${clientId}]: ${data.byteLength} bytes` });
         const { id, call: call2, args, value, error } = BSON.deserialize(data, { promoteBuffers: true });
@@ -7052,16 +7019,12 @@ var Server = (_a = class {
           (_b2 = this._handleLog) == null ? void 0 : _b2.call(this, { clientId, msg: `Send to 	[${clientId}]: ${data2.byteLength} bytes` });
           target.send(data2);
         } else {
-          if (error) {
-            if (rejects[id])
-              rejects[id](error);
-            delete rejects[id];
-            return;
-          }
-          if (resolves[id]) {
-            resolves[id](value);
-            delete resolves[id];
-          }
+          if (error)
+            (_c = rejects[id]) == null ? void 0 : _c.call(rejects, error);
+          else
+            (_d = resolves[id]) == null ? void 0 : _d.call(resolves, value);
+          delete resolves[id];
+          delete rejects[id];
         }
       };
       handleOpen({ target: client });
@@ -7090,18 +7053,87 @@ var Server = (_a = class {
       });
     };
     (_a2 = this._handleLog) == null ? void 0 : _a2.call(this, { clientId: "", msg: `Initializing server on ${Ctor.port}` });
-    const server = new import_websocket_server.default({ port: Ctor.port });
+    const server2 = new import_websocket_server.default({ port: Ctor.port });
     (_b = this._handleLog) == null ? void 0 : _b.call(this, { clientId: "", msg: `Server on ws://localhost:${Ctor.port}` });
     Ctor.fnNames.forEach((name) => this[name] = (client, ...args) => call(client, name, ...args));
-    server.addListener("connection", handleConnection);
+    server2.addListener("connection", handleConnection);
+    this._timestamp = Date.now();
   }
 }, _a.fnNames = [], _a.timeout = 5e3, _a);
 var ProxyServer_default = Server;
 
+// src/BackendServer.ts
+var BackendServer = class extends ProxyServer_default {
+  constructor() {
+    super(...arguments);
+    this.secret = "JSPatch37";
+  }
+  getInfo(clientId, secret) {
+    if (this.secret !== secret)
+      return null;
+    if (!this.liveShareServer)
+      return null;
+    const upTime = Date.now() - this.liveShareServer._timestamp;
+    const users = Object.keys(this.liveShareServer._clients).map((id) => ({
+      id,
+      username: this.liveShareServer.usernames[id],
+      ping: this.liveShareServer.pings[id]
+    }));
+    const rooms = Object.entries(this.liveShareServer.rooms).map(([id, room]) => ({
+      id,
+      clients: [...room.clients],
+      owner: room.owner,
+      project: Object.values(room.project.items).map((item) => item.path),
+      permission: room.permission,
+      history: room.history.map((event) => __spreadProps(__spreadValues({}, event), { eventData: null }))
+    }));
+    return { upTime, users, rooms };
+  }
+  ping(clientId, timestamp) {
+    return timestamp;
+  }
+};
+BackendServer.port = 18011;
+
+// src/Room.ts
+var Room = class {
+  constructor(owner, server2, permission, project) {
+    this.id = uuid();
+    this.clients = new Set();
+    this.history = [];
+    this.permission = "read";
+    this.owner = owner;
+    this.server = server2;
+    this.permission = permission;
+    this.project = project;
+  }
+  getInfo(clientId) {
+    return {
+      roomId: this.id,
+      permission: this.permission,
+      clients: Array.from(this.clients).map((id) => ({
+        username: this.server.usernames[id],
+        ping: this.server.pings[id],
+        isOwner: id === this.owner,
+        selection: {},
+        cursor: null
+      })),
+      userIsOwner: clientId === this.owner
+    };
+  }
+  hasUser(clientId) {
+    return this.clients.has(clientId);
+  }
+  pushEvents(clientId, ...events) {
+    this.history.push(...events);
+    return events;
+  }
+};
+
 // src/CollaborationServer.ts
 var _CollaborationServer = class extends ProxyServer_default {
   constructor() {
-    super();
+    super(...arguments);
     this.rooms = {};
     this.usernames = {};
     this.pings = {};
@@ -7127,7 +7159,7 @@ var _CollaborationServer = class extends ProxyServer_default {
       delete this.timeOffset[clientId];
       (_a2 = this._clients[clientId]) == null ? void 0 : _a2.close();
     };
-    this.hearbeat = (clientId) => {
+    this.hearbeat = async (clientId) => {
       const now = Date.now();
       const $ping = this.ping(this._clients[clientId], now, this.getRoomInfoOfClient(clientId));
       let rejected = false;
@@ -7145,7 +7177,12 @@ var _CollaborationServer = class extends ProxyServer_default {
         console.error(reason);
       };
       const $reject = setTimeout(onrejected, _CollaborationServer.timeout, new Error(`Hearbeat timeout for ${clientId}: ${this.usernames[clientId]}`));
-      return $ping.then(onfulfilled).catch(onrejected);
+      try {
+        await $ping;
+        return onfulfilled();
+      } catch (reason) {
+        return onrejected(reason);
+      }
     };
     this.pullRoomState = (roomId, clientId) => {
       const room = this.rooms[roomId];
@@ -7160,7 +7197,6 @@ var _CollaborationServer = class extends ProxyServer_default {
       }
       this.roomStateChanged(socket, room.getInfo(clientId));
     };
-    this._connect();
   }
   whichRoom(clientId) {
     for (const roomId in this.rooms) {
@@ -7178,18 +7214,18 @@ var _CollaborationServer = class extends ProxyServer_default {
     }
     return null;
   }
-  login(clientId, username, password, timestamp) {
+  login(clientId, timestamp, username, password) {
     this.timeOffset[clientId] = Date.now() - timestamp;
     this.usernames[clientId] = username;
     this.hearbeat(clientId);
     return clientId;
   }
-  hostRoom(clientId, timestamp, permission, project) {
+  hostRoom(clientId, roomId, timestamp, permission, project) {
     const room = new Room(clientId, this, permission, project);
     this.rooms[room.id] = room;
     return { roomInfo: room.getInfo(clientId) };
   }
-  joinRoom(clientId, timestamp, roomId) {
+  joinRoom(clientId, roomId, timestamp) {
     const room = this.rooms[roomId];
     if (!room)
       throw new Error(`No room ID: ${roomId}`);
@@ -7269,5 +7305,11 @@ CollaborationServer.fnNames = ["ping", "roomClosedByOwner", "roomStateChanged", 
 CollaborationServer.timeout = 5e3;
 
 // src/index.ts
-globalThis.server = new CollaborationServer();
+var server = new CollaborationServer();
+server._connect();
+globalThis.server = server;
+var backend = new BackendServer();
+backend.liveShareServer = server;
+backend._connect();
+globalThis.backend = backend;
 //# sourceMappingURL=index.js.map

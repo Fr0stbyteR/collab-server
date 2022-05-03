@@ -5,10 +5,10 @@ import type { WebSocketLog } from "./websocket/ProxyServer.types";
 
 export interface ILiveShareServerPrepended {
     login(clientId: string, ...args: Parameters<ILiveShareServer["login"]>): ReturnType<ILiveShareServer["login"]>;
+    logout(clientId: string, ...args: Parameters<ILiveShareServer["logout"]>): ReturnType<ILiveShareServer["logout"]>;
     hostRoom(clientId: string, ...args: Parameters<ILiveShareServer["hostRoom"]>): ReturnType<ILiveShareServer["hostRoom"]>;
     joinRoom(clientId: string, ...args: Parameters<ILiveShareServer["joinRoom"]>): ReturnType<ILiveShareServer["joinRoom"]>;
     closeRoom(clientId: string, ...args: Parameters<ILiveShareServer["closeRoom"]>): ReturnType<ILiveShareServer["closeRoom"]>;
-    logout(clientId: string, ...args: Parameters<ILiveShareServer["logout"]>): ReturnType<ILiveShareServer["logout"]>;
     requestChanges(clientId: string, ...args: Parameters<ILiveShareServer["requestChanges"]>): ReturnType<ILiveShareServer["requestChanges"]>;
 }
 
@@ -20,10 +20,6 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
     readonly usernames: Record<string, string> = {};
     readonly pings: Record<string, number> = {};
     readonly timeOffset: Record<string, number> = {};
-    constructor() {
-        super();
-        this._connect();
-    }
     _handleLog = (log: WebSocketLog) => {
         const username = this.usernames[log.clientId];
         // eslint-disable-next-line no-console
@@ -42,7 +38,7 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         delete this.timeOffset[clientId];
         this._clients[clientId]?.close();
     };
-    hearbeat = (clientId: string) => {
+    hearbeat = async (clientId: string) => {
         const now = Date.now();
         const $ping = this.ping(this._clients[clientId], now, this.getRoomInfoOfClient(clientId));
         let rejected = false;
@@ -59,7 +55,12 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
             console.error(reason);
         };
         const $reject = setTimeout(onrejected, CollaborationServer.timeout, new Error(`Hearbeat timeout for ${clientId}: ${this.usernames[clientId]}`));
-        return $ping.then(onfulfilled).catch(onrejected);
+        try {
+            await $ping;
+            return onfulfilled();
+        } catch (reason) {
+            return onrejected(reason);
+        }
     };
     pullRoomState = (roomId: string, clientId: string) => {
         const room = this.rooms[roomId];
@@ -89,18 +90,18 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         }
         return null;
     }
-    login(clientId: string, username: string, password: string, timestamp: number) {
+    login(clientId: string, timestamp: number, username: string, password: string) {
         this.timeOffset[clientId] = Date.now() - timestamp;
         this.usernames[clientId] = username;
         this.hearbeat(clientId);
         return clientId;
     }
-    hostRoom(clientId: string, timestamp: number, permission: "read" | "write", project: LiveShareProject) {
+    hostRoom(clientId: string, roomId: string, timestamp: number, permission: "read" | "write", project: LiveShareProject) {
         const room = new Room(clientId, this, permission, project);
         this.rooms[room.id] = room;
         return { roomInfo: room.getInfo(clientId) };
     }
-    joinRoom(clientId: string, timestamp: number, roomId: string) {
+    joinRoom(clientId: string, roomId: string, timestamp: number) {
         const room = this.rooms[roomId];
         if (!room) throw new Error(`No room ID: ${roomId}`);
         const socket = this._clients[clientId];

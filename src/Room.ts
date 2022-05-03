@@ -23,7 +23,9 @@ export default class Room {
             clients: Array.from(this.clients).map(id => ({
                 username: this.server.usernames[id],
                 ping: this.server.pings[id],
-                isOwner: id === this.owner
+                isOwner: id === this.owner,
+                selection: {},
+                cursor: null
             })),
             userIsOwner: clientId === this.owner
         };

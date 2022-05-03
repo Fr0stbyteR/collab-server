@@ -13,7 +13,13 @@ export interface WebSocketLog {
     clientId: string;
 }
 
-export type ProxyServer<IClient extends {} = {}, IServer extends {} = {}> = PrependedFunctionMap<PromisifiedFunctionMap<IClient>, [WebSocket]> & IServer & { _handleLog?: (log: WebSocketLog) => any; _server: WebSocket.Server; _clients: Record<string, WebSocket>; _connect(): void };
+export type ProxyServer<IClient extends {} = {}, IServer extends {} = {}> = PrependedFunctionMap<PromisifiedFunctionMap<IClient>, [WebSocket]> & IServer & {
+    _handleLog?: (log: WebSocketLog) => any;
+    _server: WebSocket.Server;
+    _timestamp: number;
+    _clients: Record<string, WebSocket>;
+    _connect(): void;
+};
 export const ProxyServer: {
     port: number;
     fnNames: string[];

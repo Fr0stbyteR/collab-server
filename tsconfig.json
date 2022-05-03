@@ -7,7 +7,7 @@
     "preserveConstEnums": true,
     "target": "es2017",
     "sourceMap": true,
-    "lib": ["esnext"],
+    "lib": ["esnext", "DOM"],
     "jsx": "react",
     "outDir": "dist",
     "noUnusedLocals": false,

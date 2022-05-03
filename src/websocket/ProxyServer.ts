@@ -12,6 +12,7 @@ const Server = class ProxyServer {
     _server: WebSocket.Server;
     _clients: Record<string, WebSocket> = {};
     _handleLog?: (log: WebSocketLog) => any;
+    _timestamp: number;
     _connect() {
         const Ctor = (this.constructor as typeof ProxyServer);
         const socketMap = new Map<WebSocket, string>();
@@ -39,6 +40,7 @@ const Server = class ProxyServer {
                 socketMap.delete(client);
                 if (!e.wasClean) {
                     this._handleLog?.({ error: true, clientId, msg: `Error from \t[${clientId}]: WebSocket closed: ${e.code} - ${e.reason}` });
+                    // eslint-disable-next-line no-console
                     console.error(`WebSocket closed: ${e.code} - ${e.reason}`);
                 }
             };
@@ -57,15 +59,10 @@ const Server = class ProxyServer {
                     this._handleLog?.({ clientId, msg: `Send to \t[${clientId}]: ${data.byteLength} bytes` });
                     target.send(data);
                 } else {
-                    if (error) {
-                        if (rejects[id]) rejects[id](error);
-                        delete rejects[id];
-                        return;
-                    }
-                    if (resolves[id]) {
-                        resolves[id](value);
-                        delete resolves[id];
-                    }
+                    if (error) rejects[id]?.(error);
+                    else resolves[id]?.(value);
+                    delete resolves[id];
+                    delete rejects[id];
                 }
             };
             handleOpen({ target: client });
@@ -97,6 +94,7 @@ const Server = class ProxyServer {
         this._handleLog?.({ clientId: "", msg: `Server on ws://localhost:${Ctor.port}` });
         Ctor.fnNames.forEach(name => (this as any)[name] = (client: WebSocket, ...args: any[]) => call(client, name, ...args));
         server.addListener("connection", handleConnection);
+        this._timestamp = Date.now();
     }
 } as typeof ProxyServer;
 
