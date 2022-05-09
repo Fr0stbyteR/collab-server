@@ -4,9 +4,11 @@ import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 import * as React from "react";
 import * as ReactDOM from "react-dom/client";
-import { Alert, Box, Container, Grid, TextField } from "@mui/material";
+import { Alert, Box, Container, Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField } from "@mui/material";
+import { DataGrid, GridColDef, GridValueGetterParams } from "@mui/x-data-grid";
 import BackendClient from "./BackendClient";
 import type { IServerInfo } from "./BackendServer";
+import { msToTime } from "./utils";
 
 const client = new BackendClient();
 client._serverUrl = "ws://localhost:18011";
@@ -53,19 +55,59 @@ const App = () => {
     }, []);
     return (
         <>
-            <Grid container spacing={1}>
-                <Grid item xs={4}>
-                    {isConnected ? <Alert severity="success">Connected</Alert> : <Alert severity="warning">Not connected</Alert>}
-                </Grid>
-                <Grid item xs={8}>
-                    <Box component="form" sx={{ "& .MuiTextField-root": { m: 1 } }}>
-                        <TextField multiline size="small" id="freq" label="Fetch Freq (ms)" type="number" value={fetchFreq} onChange={onChangeFreq} />
-                        <TextField multiline size="small" type="password" label="Password" id="pass" value={pass} onChange={onChangePass} />
-                    </Box>
+            <Grid container spacing={1} direction="column" width="100%" padding="20px">
+                <Grid container spacing={1} direction="row">
+                    <Grid item xs={4}>
+                        {isConnected
+                            ? <Alert severity="success">{`Server up: ${msToTime(serverInfo?.upTime || 0)}`}</Alert>
+                            : <Alert severity="warning">Not connected</Alert>
+                        }
+                    </Grid>
+                    <Grid item xs={8}>
+                        <Box component="form" sx={{ "& .MuiTextField-root": { m: 1 } }}>
+                            <TextField multiline size="small" id="freq" label="Fetch Freq (ms)" type="number" value={fetchFreq} onChange={onChangeFreq} />
+                            <TextField multiline size="small" type="password" label="Password" id="pass" value={pass} onChange={onChangePass} />
+                        </Box>
+                    </Grid>
                 </Grid>
                 {serverInfo
-                    ? <Grid item xs={12}>
-                        <div>{JSON.stringify(serverInfo)}</div>
+                    ? <Grid container direction="column">
+                        <Grid item xs={12} sx={{ "&": { overflowWrap: "anywhere" } }}>
+                            {JSON.stringify(serverInfo)}
+                        </Grid>
+                        <DataGrid
+                            autoHeight
+                            density="compact"
+                            rows={serverInfo.users}
+                            columns={[
+                                { field: "id", headerName: "ID", width: 300 },
+                                { field: "nickname", headerName: "Nick name", width: 120 },
+                                { field: "ping", headerName: "Ping", type: "number", width: 90 }
+                            ]}
+                        />
+                        {/*
+                        <TableContainer component={Paper}>
+                            <Table sx={{ minWidth: 650 }} size="small" aria-label="a dense table">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>User ID</TableCell>
+                                        <TableCell>Ping</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {serverInfo.users.map(user => (
+                                        <TableRow
+                                            key={user.id}
+                                            sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
+                                        >
+                                            <TableCell component="th" scope="row">{user.id}</TableCell>
+                                            <TableCell align="right">{user.ping}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                        */}
                     </Grid>
                     : undefined
                 }

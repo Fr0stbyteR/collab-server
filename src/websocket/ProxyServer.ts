@@ -46,7 +46,7 @@ const Server = class ProxyServer {
             };
             const handleMessage = async (e: WebSocket.MessageEvent) => {
                 const { target, data } = e;
-                this._handleLog?.({ clientId, msg: `Received from \t[${clientId}]: ${(data as ArrayBuffer).byteLength} bytes` });
+                this._handleLog?.({ clientId, msg: `Received from \t[${clientId}]: \t${"".padEnd(12, " ")}\t${(data as ArrayBuffer).byteLength} bytes` });
                 const { id, call, args, value, error } = BSON.deserialize(data as ArrayBuffer, { promoteBuffers: true }) as WebSocketResponse & WebSocketRequest;
                 if (call) {
                     const r: WebSocketResponse = { id };
@@ -56,7 +56,7 @@ const Server = class ProxyServer {
                         r.error = e;
                     }
                     const data = BSON.serialize(r);
-                    this._handleLog?.({ clientId, msg: `Send to \t[${clientId}]: ${data.byteLength} bytes` });
+                    this._handleLog?.({ clientId, msg: `Return to \t[${clientId}]: \t${call.padEnd(12, " ")}\t${data.byteLength} bytes` });
                     target.send(data);
                 } else {
                     if (error) rejects[id]?.(error);
@@ -79,7 +79,7 @@ const Server = class ProxyServer {
                 rejects[id] = reject;
                 const data = BSON.serialize({ id, call, args });
                 const clientId = socketMap.get(client);
-                this._handleLog?.({ clientId, msg: `Send to \t[${clientId}]: ${data.byteLength} bytes` });
+                this._handleLog?.({ clientId, msg: `Send to \t[${clientId}]: \t${call.padEnd(12, " ")}\t${data.byteLength} bytes` });
                 client.send(data);
                 const $timeout = setTimeout(() => {
                     delete resolves[id];

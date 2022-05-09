@@ -7006,7 +7006,7 @@ var Server = (_a = class {
       const handleMessage = async (e) => {
         var _a4, _b2, _c, _d;
         const { target, data } = e;
-        (_a4 = this._handleLog) == null ? void 0 : _a4.call(this, { clientId, msg: `Received from 	[${clientId}]: ${data.byteLength} bytes` });
+        (_a4 = this._handleLog) == null ? void 0 : _a4.call(this, { clientId, msg: `Received from 	[${clientId}]: 	${"".padEnd(12, " ")}	${data.byteLength} bytes` });
         const { id, call: call2, args, value, error } = BSON.deserialize(data, { promoteBuffers: true });
         if (call2) {
           const r = { id };
@@ -7016,7 +7016,7 @@ var Server = (_a = class {
             r.error = e2;
           }
           const data2 = BSON.serialize(r);
-          (_b2 = this._handleLog) == null ? void 0 : _b2.call(this, { clientId, msg: `Send to 	[${clientId}]: ${data2.byteLength} bytes` });
+          (_b2 = this._handleLog) == null ? void 0 : _b2.call(this, { clientId, msg: `Return to 	[${clientId}]: 	${call2.padEnd(12, " ")}	${data2.byteLength} bytes` });
           target.send(data2);
         } else {
           if (error)
@@ -7041,7 +7041,7 @@ var Server = (_a = class {
         rejects[id] = reject;
         const data = BSON.serialize({ id, call: call2, args });
         const clientId = socketMap.get(client);
-        (_a3 = this._handleLog) == null ? void 0 : _a3.call(this, { clientId, msg: `Send to 	[${clientId}]: ${data.byteLength} bytes` });
+        (_a3 = this._handleLog) == null ? void 0 : _a3.call(this, { clientId, msg: `Send to 	[${clientId}]: 	${call2.padEnd(12, " ")}	${data.byteLength} bytes` });
         client.send(data);
         const $timeout = setTimeout(() => {
           var _a4;
@@ -7076,7 +7076,7 @@ var BackendServer = class extends ProxyServer_default {
     const upTime = Date.now() - this.liveShareServer._timestamp;
     const users = Object.keys(this.liveShareServer._clients).map((id) => ({
       id,
-      username: this.liveShareServer.usernames[id],
+      nickname: this.liveShareServer.nicknames[id],
       ping: this.liveShareServer.pings[id]
     }));
     const rooms = Object.entries(this.liveShareServer.rooms).map(([id, room]) => ({
@@ -7097,11 +7097,12 @@ BackendServer.port = 18011;
 
 // src/Room.ts
 var Room = class {
-  constructor(owner, server2, permission, project) {
-    this.id = uuid();
+  constructor(owner, id, password, server2, permission, project) {
     this.clients = new Set();
     this.history = [];
     this.permission = "read";
+    this.id = id;
+    this.password = password;
     this.owner = owner;
     this.server = server2;
     this.permission = permission;
@@ -7112,7 +7113,7 @@ var Room = class {
       roomId: this.id,
       permission: this.permission,
       clients: Array.from(this.clients).map((id) => ({
-        username: this.server.usernames[id],
+        nickname: this.server.nicknames[id],
         ping: this.server.pings[id],
         isOwner: id === this.owner,
         selection: {},
@@ -7135,18 +7136,17 @@ var _CollaborationServer = class extends ProxyServer_default {
   constructor() {
     super(...arguments);
     this.rooms = {};
-    this.usernames = {};
+    this.nicknames = {};
     this.pings = {};
     this.timeOffset = {};
     this._handleLog = (log) => {
-      const username = this.usernames[log.clientId];
+      const username = this.nicknames[log.clientId];
       if (log.error)
         console.error(`[${username || "Server"}] 	${log.msg}`);
       else
         console.log(`[${username || "Server"}] 	${log.msg}`);
     };
     this.logout = (clientId) => {
-      var _a2;
       for (const roomId in this.rooms) {
         const room = this.rooms[roomId];
         if (room.owner === clientId)
@@ -7154,10 +7154,13 @@ var _CollaborationServer = class extends ProxyServer_default {
         if (room.hasUser(clientId))
           room.clients.delete(clientId);
       }
-      delete this.usernames[clientId];
+      delete this.nicknames[clientId];
       delete this.pings[clientId];
       delete this.timeOffset[clientId];
-      (_a2 = this._clients[clientId]) == null ? void 0 : _a2.close();
+      setImmediate(() => {
+        var _a2;
+        return (_a2 = this._clients[clientId]) == null ? void 0 : _a2.close();
+      });
     };
     this.hearbeat = async (clientId) => {
       const now = Date.now();
@@ -7176,7 +7179,7 @@ var _CollaborationServer = class extends ProxyServer_default {
         this.logout(clientId);
         console.error(reason);
       };
-      const $reject = setTimeout(onrejected, _CollaborationServer.timeout, new Error(`Hearbeat timeout for ${clientId}: ${this.usernames[clientId]}`));
+      const $reject = setTimeout(onrejected, _CollaborationServer.timeout, new Error(`Hearbeat timeout for ${clientId}: ${this.nicknames[clientId]}`));
       try {
         await $ping;
         return onfulfilled();
@@ -7214,21 +7217,30 @@ var _CollaborationServer = class extends ProxyServer_default {
     }
     return null;
   }
-  login(clientId, timestamp, username, password) {
+  pingServer(clientId, timestamp) {
+    return Date.now();
+  }
+  reportPing(clientId, ping) {
+    this.pings[clientId] = ping;
+  }
+  login(clientId, timestamp, nickname, username, password) {
     this.timeOffset[clientId] = Date.now() - timestamp;
-    this.usernames[clientId] = username;
-    this.hearbeat(clientId);
+    this.nicknames[clientId] = nickname;
     return clientId;
   }
-  hostRoom(clientId, roomId, timestamp, permission, project) {
-    const room = new Room(clientId, this, permission, project);
+  hostRoom(clientId, roomId, password, timestamp, permission, project) {
+    if (this.rooms[roomId])
+      throw Error("Room ID already exist.");
+    const room = new Room(clientId, roomId, password, this, permission, project);
     this.rooms[room.id] = room;
     return { roomInfo: room.getInfo(clientId) };
   }
-  joinRoom(clientId, roomId, timestamp) {
+  joinRoom(clientId, roomId, username, password, timestamp) {
     const room = this.rooms[roomId];
     if (!room)
       throw new Error(`No room ID: ${roomId}`);
+    if (password !== room.password)
+      throw new Error("Room password incorrect.");
     const socket = this._clients[clientId];
     const handleClose = () => {
       room.clients.delete(clientId);
@@ -7263,7 +7275,7 @@ var _CollaborationServer = class extends ProxyServer_default {
     const timeOffset = this.timeOffset[clientId];
     if (typeof timeOffset !== "number")
       throw new Error(`User ${clientId}`);
-    const username = this.usernames[clientId];
+    const username = this.nicknames[clientId];
     if (typeof username !== "string")
       throw new Error(`No Username for ${clientId}`);
     const localEvents = events.map((e) => __spreadProps(__spreadValues({}, e), { timestamp: e.timestamp + timeOffset }));
