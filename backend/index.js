@@ -62713,14 +62713,14 @@ const theme2 = createTheme({ palette: {
             try {
               r.value = await this[call2](...args);
             } catch (e2) {
-              r.error = e2;
+              r.error = e2.message;
             }
             const data2 = serialize2(r);
             (_b2 = this._handleLog) == null ? void 0 : _b2.call(this, { msg: `Send: 	${call2}	${data2.byteLength} bytes` });
             socket.send(data2);
           } else {
             if (error)
-              (_c2 = rejects[id]) == null ? void 0 : _c2.call(rejects, error);
+              (_c2 = rejects[id]) == null ? void 0 : _c2.call(rejects, new Error(error));
             else
               (_d = resolves[id]) == null ? void 0 : _d.call(resolves, value);
             delete resolves[id];
@@ -62805,6 +62805,7 @@ const theme2 = createTheme({ palette: {
           }
           setErrors("");
           const serverInfo2 = await client.getInfo(pass);
+          globalThis.serverInfo = serverInfo2;
           setServerInfo(serverInfo2);
         } catch (error) {
           setErrors(error.message);
@@ -62861,11 +62862,7 @@ const theme2 = createTheme({ palette: {
     })))), serverInfo ? /* @__PURE__ */ React223.createElement(Grid_default, {
       container: true,
       direction: "column"
-    }, /* @__PURE__ */ React223.createElement(Grid_default, {
-      item: true,
-      xs: 12,
-      sx: { "&": { overflowWrap: "anywhere" } }
-    }, JSON.stringify(serverInfo)), /* @__PURE__ */ React223.createElement(DataGrid2, {
+    }, /* @__PURE__ */ React223.createElement(DataGrid2, {
       autoHeight: true,
       density: "compact",
       rows: serverInfo.users,
@@ -62874,6 +62871,57 @@ const theme2 = createTheme({ palette: {
         { field: "nickname", headerName: "Nick name", width: 120 },
         { field: "ping", headerName: "Ping", type: "number", width: 90 }
       ]
+    }), serverInfo.rooms.map((room) => {
+      var _a2;
+      return /* @__PURE__ */ React223.createElement(Grid_default, {
+        key: room.id,
+        container: true,
+        direction: "row"
+      }, /* @__PURE__ */ React223.createElement(Grid_default, {
+        item: true,
+        xs: 2
+      }, "Room"), /* @__PURE__ */ React223.createElement(Grid_default, {
+        item: true,
+        xs: 4
+      }, room.id), /* @__PURE__ */ React223.createElement(Grid_default, {
+        item: true,
+        xs: 2
+      }, room.permission), /* @__PURE__ */ React223.createElement(Grid_default, {
+        item: true,
+        xs: 4
+      }, (_a2 = serverInfo.users.find(({ id }) => id === room.owner)) == null ? void 0 : _a2.nickname), /* @__PURE__ */ React223.createElement(Grid_default, {
+        container: true,
+        direction: "row",
+        minHeight: "300px"
+      }, /* @__PURE__ */ React223.createElement(Grid_default, {
+        item: true,
+        xs: 6
+      }, /* @__PURE__ */ React223.createElement(DataGrid2, {
+        pageSize: 5,
+        rowsPerPageOptions: [5, 10, 50, 100],
+        density: "compact",
+        rows: room.clients.map((clientId) => serverInfo.users.find(({ id }) => id === clientId)),
+        columns: [
+          { field: "id", headerName: "ID", width: 300 },
+          { field: "nickname", headerName: "Nick name", width: 120 },
+          { field: "ping", headerName: "Ping", type: "number", width: 90 }
+        ]
+      })), /* @__PURE__ */ React223.createElement(Grid_default, {
+        item: true,
+        xs: 6
+      }, /* @__PURE__ */ React223.createElement(DataGrid2, {
+        pageSize: 5,
+        rowsPerPageOptions: [5, 10, 50, 100],
+        density: "compact",
+        rows: room.project,
+        getRowId: (row) => row.id,
+        columns: [
+          { field: "path", headerName: "Path", width: 150, valueFormatter: (v) => v.value.replace(/^\/project\//, "") || "." },
+          { field: "size", headerName: "Size", type: "number", width: 90 },
+          { field: "length", headerName: "Hist", type: "number", width: 90 },
+          { field: "$", headerName: "Cur", type: "number", width: 90 }
+        ]
+      }))));
     })) : void 0, errors ? /* @__PURE__ */ React223.createElement(Grid_default, {
       item: true,
       xs: 12

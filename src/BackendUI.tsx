@@ -4,7 +4,7 @@ import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 import * as React from "react";
 import * as ReactDOM from "react-dom/client";
-import { Alert, Box, Container, Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField } from "@mui/material";
+import { Alert, Box, Container, Grid, TextField } from "@mui/material";
 import { DataGrid, GridColDef, GridValueGetterParams } from "@mui/x-data-grid";
 import BackendClient from "./BackendClient";
 import type { IServerInfo } from "./BackendServer";
@@ -39,6 +39,7 @@ const App = () => {
                 }
                 setErrors("");
                 const serverInfo = await client.getInfo(pass);
+                (globalThis as any).serverInfo = serverInfo;
                 setServerInfo(serverInfo);
             } catch (error) {
                 setErrors(error.message);
@@ -72,9 +73,11 @@ const App = () => {
                 </Grid>
                 {serverInfo
                     ? <Grid container direction="column">
+                        {/*
                         <Grid item xs={12} sx={{ "&": { overflowWrap: "anywhere" } }}>
                             {JSON.stringify(serverInfo)}
                         </Grid>
+                        */}
                         <DataGrid
                             autoHeight
                             density="compact"
@@ -85,6 +88,44 @@ const App = () => {
                                 { field: "ping", headerName: "Ping", type: "number", width: 90 }
                             ]}
                         />
+                        {serverInfo.rooms.map(room => (
+                            <Grid key={room.id} container direction="row">
+                                <Grid item xs={2}>Room</Grid>
+                                <Grid item xs={4}>{room.id}</Grid>
+                                <Grid item xs={2}>{room.permission}</Grid>
+                                <Grid item xs={4}>{serverInfo.users.find(({ id }) => id === room.owner)?.nickname}</Grid>
+                                <Grid container direction="row" minHeight="300px">
+                                    <Grid item xs={6}>
+                                        <DataGrid
+                                            pageSize={5}
+                                            rowsPerPageOptions={[5, 10, 50, 100]}
+                                            density="compact"
+                                            rows={room.clients.map(clientId => serverInfo.users.find(({ id }) => id === clientId))}
+                                            columns={[
+                                                { field: "id", headerName: "ID", width: 300 },
+                                                { field: "nickname", headerName: "Nick name", width: 120 },
+                                                { field: "ping", headerName: "Ping", type: "number", width: 90 }
+                                            ]}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={6}>
+                                        <DataGrid
+                                            pageSize={5}
+                                            rowsPerPageOptions={[5, 10, 50, 100]}
+                                            density="compact"
+                                            rows={room.project}
+                                            getRowId={row => row.id}
+                                            columns={[
+                                                { field: "path", headerName: "Path", width: 150, valueFormatter: v => v.value.replace(/^\/project\//, "") || "." },
+                                                { field: "size", headerName: "Size", type: "number", width: 90 },
+                                                { field: "length", headerName: "Hist", type: "number", width: 90 },
+                                                { field: "$", headerName: "Cur", type: "number", width: 90 }
+                                            ]}
+                                        />
+                                    </Grid>
+                                </Grid>
+                            </Grid>
+                        ))}
                         {/*
                         <TableContainer component={Paper}>
                             <Table sx={{ minWidth: 650 }} size="small" aria-label="a dense table">

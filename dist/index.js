@@ -6961,10 +6961,6 @@ var uuid = () => {
   });
 };
 
-// src/websocket/TimeoutError.ts
-var TimeoutError = class extends Error {
-};
-
 // src/websocket/ProxyServer.ts
 var _a;
 var Server = (_a = class {
@@ -7006,21 +7002,21 @@ var Server = (_a = class {
       const handleMessage = async (e) => {
         var _a4, _b2, _c, _d;
         const { target, data } = e;
-        (_a4 = this._handleLog) == null ? void 0 : _a4.call(this, { clientId, msg: `Received from 	[${clientId}]: 	${"".padEnd(12, " ")}	${data.byteLength} bytes` });
+        (_a4 = this._handleLog) == null ? void 0 : _a4.call(this, { clientId, msg: `Received from 	[${clientId}]: 	${"".padEnd(20, " ")}	${data.byteLength} bytes` });
         const { id, call: call2, args, value, error } = BSON.deserialize(data, { promoteBuffers: true });
         if (call2) {
           const r = { id };
           try {
             r.value = await this[call2](clientId, ...args);
           } catch (e2) {
-            r.error = e2;
+            r.error = e2.message;
           }
           const data2 = BSON.serialize(r);
-          (_b2 = this._handleLog) == null ? void 0 : _b2.call(this, { clientId, msg: `Return to 	[${clientId}]: 	${call2.padEnd(12, " ")}	${data2.byteLength} bytes` });
+          (_b2 = this._handleLog) == null ? void 0 : _b2.call(this, { clientId, msg: `Return to 	[${clientId}]: 	${call2.padEnd(20, " ")}	${data2.byteLength} bytes` });
           target.send(data2);
         } else {
           if (error)
-            (_c = rejects[id]) == null ? void 0 : _c.call(rejects, error);
+            (_c = rejects[id]) == null ? void 0 : _c.call(rejects, new Error(error));
           else
             (_d = resolves[id]) == null ? void 0 : _d.call(resolves, value);
           delete resolves[id];
@@ -7028,7 +7024,7 @@ var Server = (_a = class {
         }
       };
       handleOpen({ target: client });
-      (_a3 = this._handleLog) == null ? void 0 : _a3.call(this, { clientId, msg: `Connection from 	[${clientId}]` });
+      (_a3 = this._handleLog) == null ? void 0 : _a3.call(this, { clientId, msg: `Connect from 	[${clientId}]` });
     };
     const call = (client, call2, ...args) => {
       return new Promise((resolve, reject) => {
@@ -7041,14 +7037,13 @@ var Server = (_a = class {
         rejects[id] = reject;
         const data = BSON.serialize({ id, call: call2, args });
         const clientId = socketMap.get(client);
-        (_a3 = this._handleLog) == null ? void 0 : _a3.call(this, { clientId, msg: `Send to 	[${clientId}]: 	${call2.padEnd(12, " ")}	${data.byteLength} bytes` });
+        (_a3 = this._handleLog) == null ? void 0 : _a3.call(this, { clientId, msg: `Send to 	[${clientId}]: 	${call2.padEnd(20, " ")}	${data.byteLength} bytes` });
         client.send(data);
         const $timeout = setTimeout(() => {
           var _a4;
           delete resolves[id];
           delete rejects[id];
-          (_a4 = this._handleLog) == null ? void 0 : _a4.call(this, { clientId, error: true, msg: `Socket Response Timeout: ${Ctor.timeout}ms.` });
-          reject(new TimeoutError(`Socket Response Timeout: ${Ctor.timeout}ms.`));
+          (_a4 = this._handleLog) == null ? void 0 : _a4.call(this, { clientId, error: true, msg: `Err Return to 	[${clientId}]: 	${call2.padEnd(20, " ")}	Timeout: ${Ctor.timeout}ms.` });
         }, Ctor.timeout);
       });
     };
@@ -7083,9 +7078,13 @@ var BackendServer = class extends ProxyServer_default {
       id,
       clients: [...room.clients],
       owner: room.owner,
-      project: Object.values(room.project.items).map((item) => item.path),
-      permission: room.permission,
-      history: room.history.map((event) => __spreadProps(__spreadValues({}, event), { eventData: null }))
+      project: Object.entries(room.project.items).map(([fileId, item]) => __spreadValues({
+        id: fileId,
+        path: item.path
+      }, item.isFolder === true ? {} : __spreadValues({
+        size: item.data.length
+      }, room.getHistoryInfo(fileId)))),
+      permission: room.permission
     }));
     return { upTime, users, rooms };
   }
@@ -7107,12 +7106,14 @@ var Room = class {
     this.server = server2;
     this.permission = permission;
     this.project = project;
+    this.clients.add(owner);
   }
   getInfo(clientId) {
     return {
       roomId: this.id,
       permission: this.permission,
       clients: Array.from(this.clients).map((id) => ({
+        clientId: id,
         nickname: this.server.nicknames[id],
         ping: this.server.pings[id],
         isOwner: id === this.owner,
@@ -7122,12 +7123,24 @@ var Room = class {
       userIsOwner: clientId === this.owner
     };
   }
-  hasUser(clientId) {
-    return this.clients.has(clientId);
-  }
   pushEvents(clientId, ...events) {
     this.history.push(...events);
     return events;
+  }
+  getHistoryInfo(fileId) {
+    const history = this.project.history[fileId];
+    if (!history)
+      return null;
+    const { $, eventQueue } = history;
+    return { $, length: eventQueue.length };
+  }
+  transferOwnership(clientId, toClientId) {
+    if (this.owner !== clientId)
+      throw new Error(`Room is not owned by: ${clientId}`);
+    if (!this.clients.has(clientId))
+      throw new Error(`Room does not have client: ${clientId}`);
+    this.owner = toClientId;
+    return this.getInfo(clientId);
   }
 };
 
@@ -7149,10 +7162,13 @@ var _CollaborationServer = class extends ProxyServer_default {
     this.logout = (clientId) => {
       for (const roomId in this.rooms) {
         const room = this.rooms[roomId];
-        if (room.owner === clientId)
-          this.closeRoom(clientId, roomId);
-        if (room.hasUser(clientId))
-          room.clients.delete(clientId);
+        if (room.owner === clientId) {
+          if (room.clients.size >= 2)
+            this.transferOwnership(clientId, roomId, room.clients.values().next().value);
+          else
+            this.closeRoom(clientId, roomId);
+        }
+        room.clients.delete(clientId);
       }
       delete this.nicknames[clientId];
       delete this.pings[clientId];
@@ -7226,6 +7242,13 @@ var _CollaborationServer = class extends ProxyServer_default {
   login(clientId, timestamp, nickname, username, password) {
     this.timeOffset[clientId] = Date.now() - timestamp;
     this.nicknames[clientId] = nickname;
+    const socket = this._clients[clientId];
+    const handleClose = () => {
+      this.logout(clientId);
+      socket.removeEventListener("close", handleClose);
+    };
+    socket.removeEventListener("close", handleClose);
+    socket.addEventListener("close", handleClose);
     return clientId;
   }
   hostRoom(clientId, roomId, password, timestamp, permission, project) {
@@ -7235,25 +7258,48 @@ var _CollaborationServer = class extends ProxyServer_default {
     this.rooms[room.id] = room;
     return { roomInfo: room.getInfo(clientId) };
   }
+  leaveRoom(clientId, roomId) {
+    const room = this.rooms[roomId];
+    if (!room)
+      return;
+    if (!room.clients.has(clientId))
+      return;
+    room.clients.delete(clientId);
+    if (room.owner === clientId) {
+      if (room.clients.size)
+        this.transferOwnership(clientId, roomId, room.clients.values().next().value);
+      else
+        this.closeRoom(clientId, roomId);
+    }
+  }
+  transferOwnership(clientId, roomId, toClientId) {
+    const room = this.rooms[roomId];
+    if (!room)
+      throw Error(`No room ID: ${roomId}`);
+    if (!room.clients.has(clientId))
+      throw Error(`User not in room ID: ${roomId}`);
+    const roomInfo = room.transferOwnership(clientId, toClientId);
+    room.clients.forEach((id) => {
+      const socket = this._clients[id];
+      if (socket)
+        this.roomStateChanged(socket, roomInfo);
+    });
+    return roomInfo;
+  }
   joinRoom(clientId, roomId, username, password, timestamp) {
     const room = this.rooms[roomId];
     if (!room)
       throw new Error(`No room ID: ${roomId}`);
     if (password !== room.password)
       throw new Error("Room password incorrect.");
-    const socket = this._clients[clientId];
-    const handleClose = () => {
-      room.clients.delete(clientId);
-      socket.removeEventListener("close", handleClose);
-    };
-    socket.removeEventListener("close", handleClose);
-    socket.addEventListener("close", handleClose);
     room.clients.add(clientId);
     const roomInfo = room.getInfo(clientId);
-    Array.from(room.clients).filter((id) => id !== clientId).forEach((id) => {
-      const socket2 = this._clients[id];
-      if (socket2)
-        this.roomStateChanged(socket2, roomInfo);
+    room.clients.forEach((id) => {
+      if (id === clientId)
+        return;
+      const socket = this._clients[id];
+      if (socket)
+        this.roomStateChanged(socket, roomInfo);
     });
     return { roomInfo, project: room.project, history: room.history };
   }
@@ -7264,9 +7310,11 @@ var _CollaborationServer = class extends ProxyServer_default {
     if (clientId !== room.owner)
       throw new Error(`Client is not the owner of the room ${roomId}`);
     room.clients.forEach((clientId2) => {
-      if (this._clients[clientId2])
-        this.roomClosedByOwner(this._clients[clientId2], roomId);
+      const socket = this._clients[clientId2];
+      if (socket)
+        this.roomClosedByOwner(socket, roomId);
     });
+    delete this.rooms[roomId];
   }
   async requestChanges(clientId, roomId, ...events) {
     const room = this.rooms[roomId];
@@ -7319,9 +7367,9 @@ CollaborationServer.timeout = 5e3;
 // src/index.ts
 var server = new CollaborationServer();
 server._connect();
-globalThis.server = server;
+global.server = server;
 var backend = new BackendServer();
 backend.liveShareServer = server;
 backend._connect();
-globalThis.backend = backend;
+global.backend = backend;
 //# sourceMappingURL=index.js.map

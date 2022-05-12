@@ -1,4 +1,4 @@
-import type { ILiveShareServer, ILiveShareClient, ChangeEvent, LiveShareProject } from "@jspatcher/jspatcher/src/core/LiveShareClient";
+import type { ILiveShareServer, ILiveShareClient, ChangeEvent, LiveShareProject, RoomInfo } from "@jspatcher/jspatcher/src/core/LiveShareClient";
 import Room from "./Room";
 import ProxyServer from "./websocket/ProxyServer";
 import type { WebSocketLog } from "./websocket/ProxyServer.types";
@@ -9,6 +9,7 @@ export interface ILiveShareServerPrepended {
     login(clientId: string, ...args: Parameters<ILiveShareServer["login"]>): ReturnType<ILiveShareServer["login"]>;
     logout(clientId: string, ...args: Parameters<ILiveShareServer["logout"]>): ReturnType<ILiveShareServer["logout"]>;
     hostRoom(clientId: string, ...args: Parameters<ILiveShareServer["hostRoom"]>): ReturnType<ILiveShareServer["hostRoom"]>;
+    transferOwnership(clientId: string, ...args: Parameters<ILiveShareServer["transferOwnership"]>): ReturnType<ILiveShareServer["transferOwnership"]>;
     joinRoom(clientId: string, ...args: Parameters<ILiveShareServer["joinRoom"]>): ReturnType<ILiveShareServer["joinRoom"]>;
     closeRoom(clientId: string, ...args: Parameters<ILiveShareServer["closeRoom"]>): ReturnType<ILiveShareServer["closeRoom"]>;
     requestChanges(clientId: string, ...args: Parameters<ILiveShareServer["requestChanges"]>): ReturnType<ILiveShareServer["requestChanges"]>;
@@ -32,8 +33,11 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
     logout = (clientId: string) => {
         for (const roomId in this.rooms) {
             const room = this.rooms[roomId];
-            if (room.owner === clientId) this.closeRoom(clientId, roomId);
-            if (room.hasUser(clientId)) room.clients.delete(clientId);
+            if (room.owner === clientId) {
+                if (room.clients.size >= 2) this.transferOwnership(clientId, roomId, room.clients.values().next().value);
+                else this.closeRoom(clientId, roomId);
+            }
+            room.clients.delete(clientId);
         }
         delete this.nicknames[clientId];
         delete this.pings[clientId];
@@ -101,6 +105,13 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
     login(clientId: string, timestamp: number, nickname: string, username: string, password: string) {
         this.timeOffset[clientId] = Date.now() - timestamp;
         this.nicknames[clientId] = nickname;
+        const socket = this._clients[clientId];
+        const handleClose = () => {
+            this.logout(clientId);
+            socket.removeEventListener("close", handleClose);
+        };
+        socket.removeEventListener("close", handleClose);
+        socket.addEventListener("close", handleClose);
         // this.hearbeat(clientId);
         return clientId;
     }
@@ -110,20 +121,35 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         this.rooms[room.id] = room;
         return { roomInfo: room.getInfo(clientId) };
     }
+    leaveRoom(clientId: string, roomId: string) {
+        const room = this.rooms[roomId];
+        if (!room) return;
+        if (!room.clients.has(clientId)) return;
+        room.clients.delete(clientId);
+        if (room.owner === clientId) {
+            if (room.clients.size) this.transferOwnership(clientId, roomId, room.clients.values().next().value);
+            else this.closeRoom(clientId, roomId);
+        }
+    }
+    transferOwnership(clientId: string, roomId: string, toClientId: string): RoomInfo {
+        const room = this.rooms[roomId];
+        if (!room) throw Error(`No room ID: ${roomId}`);
+        if (!room.clients.has(clientId)) throw Error(`User not in room ID: ${roomId}`);
+        const roomInfo = room.transferOwnership(clientId, toClientId);
+        room.clients.forEach((id) => {
+            const socket = this._clients[id];
+            if (socket) this.roomStateChanged(socket, roomInfo);
+        });
+        return roomInfo;
+    }
     joinRoom(clientId: string, roomId: string, username: string, password: string, timestamp: number) {
         const room = this.rooms[roomId];
         if (!room) throw new Error(`No room ID: ${roomId}`);
         if (password !== room.password) throw new Error("Room password incorrect.");
-        const socket = this._clients[clientId];
-        const handleClose = () => {
-            room.clients.delete(clientId);
-            socket.removeEventListener("close", handleClose);
-        };
-        socket.removeEventListener("close", handleClose);
-        socket.addEventListener("close", handleClose);
         room.clients.add(clientId);
         const roomInfo = room.getInfo(clientId);
-        Array.from(room.clients).filter(id => id !== clientId).forEach((id) => {
+        room.clients.forEach((id) => {
+            if (id === clientId) return;
             const socket = this._clients[id];
             if (socket) this.roomStateChanged(socket, roomInfo);
         });
@@ -134,8 +160,10 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         if (!room) throw new Error(`No room ID: ${roomId}`);
         if (clientId !== room.owner) throw new Error(`Client is not the owner of the room ${roomId}`);
         room.clients.forEach((clientId) => {
-            if (this._clients[clientId]) this.roomClosedByOwner(this._clients[clientId], roomId);
+            const socket = this._clients[clientId];
+            if (socket) this.roomClosedByOwner(socket, roomId);
         });
+        delete this.rooms[roomId];
     }
     async requestChanges(clientId: string, roomId: string, ...events: ChangeEvent[]) {
         const room = this.rooms[roomId];

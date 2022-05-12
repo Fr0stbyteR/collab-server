@@ -24,6 +24,7 @@ export default class Room {
             roomId: this.id,
             permission: this.permission,
             clients: Array.from(this.clients).map(id => ({
+                clientId: id,
                 nickname: this.server.nicknames[id],
                 ping: this.server.pings[id],
                 isOwner: id === this.owner,
@@ -33,11 +34,20 @@ export default class Room {
             userIsOwner: clientId === this.owner
         };
     }
-    hasUser(clientId: string) {
-        return this.clients.has(clientId);
-    }
     pushEvents(clientId: string, ...events: ChangeEvent[]) {
         this.history.push(...events);
         return events;
+    }
+    getHistoryInfo(fileId: string) {
+        const history = this.project.history[fileId];
+        if (!history) return null;
+        const { $, eventQueue } = history;
+        return { $, length: eventQueue.length };
+    }
+    transferOwnership(clientId: string, toClientId: string): RoomInfo {
+        if (this.owner !== clientId) throw new Error(`Room is not owned by: ${clientId}`);
+        if (!this.clients.has(clientId)) throw new Error(`Room does not have client: ${clientId}`);
+        this.owner = toClientId;
+        return this.getInfo(clientId);
     }
 }

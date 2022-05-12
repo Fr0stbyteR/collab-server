@@ -1,11 +1,16 @@
-import type { IHistoryEvent } from "@jspatcher/jspatcher/src/core/file/History";
 import type CollaborationServer from "./CollaborationServer";
 import ProxyServer from "./websocket/ProxyServer";
 
 export interface IServerInfo {
     upTime: number;
     users: { id: string; nickname: string; ping: number }[];
-    rooms: { id: string; clients: string[]; owner: string; project: string[]; permission: "read" | "write"; history: IHistoryEvent<any>[] }[];
+    rooms: {
+        id: string;
+        clients: string[];
+        owner: string;
+        project: { id: string; path: string; size?: number; length?: number; $?: number }[];
+        permission: "read" | "write";
+    }[];
 }
 
 export interface IBackendServer {
@@ -35,9 +40,15 @@ export default class BackendServer extends ProxyServer<{}, IBackendServerPrepend
             id,
             clients: [...room.clients],
             owner: room.owner,
-            project: Object.values(room.project.items).map(item => item.path),
-            permission: room.permission,
-            history: room.history.map(event => ({ ...event, eventData: null }))
+            project: Object.entries(room.project.items).map(([fileId, item]) => ({
+                id: fileId,
+                path: item.path,
+                ...(item.isFolder === true ? {} : {
+                    size: item.data.length,
+                    ...room.getHistoryInfo(fileId)
+                })
+            })),
+            permission: room.permission
         }));
         return { upTime, users, rooms };
     }
