@@ -1,4 +1,5 @@
-import type { ChangeEvent, LiveShareProject, RoomInfo } from "@jspatcher/jspatcher/src/core/LiveShareClient";
+import type { IHistoryEvent } from "@jspatcher/jspatcher/src/core/file/History";
+import type { LiveShareProject, RoomInfo } from "@jspatcher/jspatcher/src/core/LiveShareClient";
 import CollaborationServer from "./CollaborationServer";
 
 export default class Room {
@@ -7,7 +8,6 @@ export default class Room {
     readonly server: CollaborationServer;
     readonly clients = new Set<string>();
     project: LiveShareProject;
-    history: ChangeEvent[] = [];
     owner: string;
     permission: "read" | "write" = "read";
     constructor(owner: string, id: string, password: string, server: CollaborationServer, permission: "read" | "write", project: LiveShareProject) {
@@ -17,6 +17,11 @@ export default class Room {
         this.server = server;
         this.permission = permission;
         this.project = project;
+        const ownerTimeOffset = +this.server.timeOffset[owner];
+        for (const fileId in this.project.history) {
+            const history = this.project.history[fileId];
+            history.forEach(e => e.timestamp += ownerTimeOffset);
+        }
         this.clients.add(owner);
     }
     getInfo(clientId: string): RoomInfo {
@@ -34,15 +39,41 @@ export default class Room {
             userIsOwner: clientId === this.owner
         };
     }
-    pushEvents(clientId: string, ...events: ChangeEvent[]) {
-        this.history.push(...events);
-        return events;
+    getPings() {
+        const pings: Record<string, number> = {};
+        for (const clientId of this.clients) {
+            pings[clientId] = this.server.pings[clientId];
+        }
+        return pings;
+    }
+    pushEvents(events: IHistoryEvent[]) {
+        const merged: IHistoryEvent[] = [];
+        const unmerged: IHistoryEvent[] = [];
+        for (const event of events) {
+            const { fileId } = event;
+            if (!(fileId in this.project.history)) {
+                this.project.history[fileId] = [event];
+                merged.push(event);
+            } else {
+                const history = this.project.history[fileId];
+                const eventsToMerge = events.filter(e => e.fileId === fileId).sort((a, b) => a.timestamp - b.timestamp);
+                if (!eventsToMerge.length) continue;
+                if (history[history.length - 1].timestamp > eventsToMerge[0].timestamp) {
+                    unmerged.push(...eventsToMerge);
+                    continue;
+                }
+                merged.push(...eventsToMerge);
+                history.push(...eventsToMerge);
+            }
+        }
+        return { unmerged, merged };
     }
     getHistoryInfo(fileId: string) {
         const history = this.project.history[fileId];
         if (!history) return null;
-        const { $, eventQueue } = history;
-        return { $, length: eventQueue.length };
+        const { length } = history;
+        const $ = history[length - 1].nextHistoryIndex;
+        return { $, length: history.length };
     }
     transferOwnership(clientId: string, toClientId: string): RoomInfo {
         if (this.owner !== clientId) throw new Error(`Room is not owned by: ${clientId}`);

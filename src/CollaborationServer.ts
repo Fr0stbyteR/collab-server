@@ -1,4 +1,5 @@
-import type { ILiveShareServer, ILiveShareClient, ChangeEvent, LiveShareProject, RoomInfo } from "@jspatcher/jspatcher/src/core/LiveShareClient";
+import type { IHistoryEvent } from "@jspatcher/jspatcher/src/core/file/History";
+import type { ILiveShareServer, ILiveShareClient, LiveShareProject, RoomInfo } from "@jspatcher/jspatcher/src/core/LiveShareClient";
 import Room from "./Room";
 import ProxyServer from "./websocket/ProxyServer";
 import type { WebSocketLog } from "./websocket/ProxyServer.types";
@@ -33,11 +34,7 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
     logout = (clientId: string) => {
         for (const roomId in this.rooms) {
             const room = this.rooms[roomId];
-            if (room.owner === clientId) {
-                if (room.clients.size >= 2) this.transferOwnership(clientId, roomId, room.clients.values().next().value);
-                else this.closeRoom(clientId, roomId);
-            }
-            room.clients.delete(clientId);
+            if (room.clients.has(clientId)) this.leaveRoom(clientId, roomId);
         }
         delete this.nicknames[clientId];
         delete this.pings[clientId];
@@ -99,8 +96,13 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
     pingServer(clientId: string, timestamp: number) {
         return Date.now();
     }
-    reportPing(clientId: string, ping: number): void {
+    reportPing(clientId: string, ping: number) {
         this.pings[clientId] = ping;
+        for (const roomId in this.rooms) {
+            const room = this.rooms[roomId];
+            if (room.clients.has(clientId)) return room.getPings();
+        }
+        return {};
     }
     login(clientId: string, timestamp: number, nickname: string, username: string, password: string) {
         this.timeOffset[clientId] = Date.now() - timestamp;
@@ -125,10 +127,25 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         const room = this.rooms[roomId];
         if (!room) return;
         if (!room.clients.has(clientId)) return;
-        room.clients.delete(clientId);
         if (room.owner === clientId) {
-            if (room.clients.size) this.transferOwnership(clientId, roomId, room.clients.values().next().value);
-            else this.closeRoom(clientId, roomId);
+            if (room.clients.size >= 2) {
+                this.transferOwnership(clientId, roomId, room.clients.values().next().value);
+                room.clients.delete(clientId);
+                room.clients.forEach((id) => {
+                    if (id === clientId) return;
+                    const socket = this._clients[id];
+                    if (socket) this.roomStateChanged(socket, room.getInfo(id));
+                });
+            } else {
+                this.closeRoom(clientId, roomId);
+            }
+        } else {
+            room.clients.delete(clientId);
+            room.clients.forEach((id) => {
+                if (id === clientId) return;
+                const socket = this._clients[id];
+                if (socket) this.roomStateChanged(socket, room.getInfo(id));
+            });
         }
     }
     transferOwnership(clientId: string, roomId: string, toClientId: string): RoomInfo {
@@ -138,7 +155,7 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         const roomInfo = room.transferOwnership(clientId, toClientId);
         room.clients.forEach((id) => {
             const socket = this._clients[id];
-            if (socket) this.roomStateChanged(socket, roomInfo);
+            if (socket) this.roomStateChanged(socket, room.getInfo(id));
         });
         return roomInfo;
     }
@@ -151,9 +168,9 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         room.clients.forEach((id) => {
             if (id === clientId) return;
             const socket = this._clients[id];
-            if (socket) this.roomStateChanged(socket, roomInfo);
+            if (socket) this.roomStateChanged(socket, room.getInfo(id));
         });
-        return { roomInfo, project: room.project, history: room.history };
+        return { roomInfo, project: room.project };
     }
     closeRoom(clientId: string, roomId: string) {
         const room = this.rooms[roomId];
@@ -165,37 +182,24 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         });
         delete this.rooms[roomId];
     }
-    async requestChanges(clientId: string, roomId: string, ...events: ChangeEvent[]) {
+    async requestChanges(clientId: string, roomId: string, ...events: IHistoryEvent[]) {
         const room = this.rooms[roomId];
         if (!room) throw new Error(`No room ID: ${roomId}`);
+        if (room.permission !== "write") throw new Error(`Room ${roomId} doesn't have write permission`);
         const timeOffset = this.timeOffset[clientId];
-        if (typeof timeOffset !== "number") throw new Error(`User ${clientId}`);
+        if (typeof timeOffset !== "number") throw new Error(`User ${clientId} doesn't have a timeOffset`);
         const username = this.nicknames[clientId];
         if (typeof username !== "string") throw new Error(`No Username for ${clientId}`);
-        const localEvents: ChangeEvent[] = events.map(e => ({ ...e, timestamp: e.timestamp + timeOffset }));
-        let sendbackEvents: ChangeEvent[];
-        let pushedEvents: ChangeEvent[];
-        if (room.owner === clientId) {
-            pushedEvents = room.pushEvents(clientId, ...localEvents);
-            sendbackEvents = pushedEvents.map(e => ({ ...e, timestamp: e.timestamp - timeOffset }));
-        } else {
-            const { owner } = room;
-            const ownerSocket = this._clients[owner];
-            const ownerOffset = this.timeOffset[owner];
-            const ownerEvents: ChangeEvent[] = localEvents.map(e => ({ ...e, timestamp: e.timestamp - ownerOffset }));
-            const ownerDid = await this.changesFrom(ownerSocket, username, ...ownerEvents);
-            const localDid: ChangeEvent[] = ownerDid.map(e => ({ ...e, timestamp: e.timestamp + ownerOffset }));
-            pushedEvents = room.pushEvents(clientId, ...localDid);
-            sendbackEvents = pushedEvents.map(e => ({ ...e, timestamp: e.timestamp - timeOffset }));
-        }
+        const localEvents: IHistoryEvent[] = events.map(e => ({ ...e, timestamp: e.timestamp + timeOffset }));
+        const { merged, unmerged } = room.pushEvents(localEvents);
+        const sendbackEvents = unmerged.map(e => ({ ...e, timestamp: e.timestamp - timeOffset }));
         room.clients.forEach((id) => {
             if (id === clientId) return;
-            if (id === room.owner) return;
             const socket = this._clients[id];
             if (!socket) return;
             const offset = this.timeOffset[id];
             if (typeof offset !== "number") return;
-            const userEvents = pushedEvents.map(e => ({ ...e, timestamp: e.timestamp - offset }));
+            const userEvents = merged.map(e => ({ ...e, timestamp: e.timestamp - offset }));
             this.changesFrom(socket, username, ...userEvents);
         });
         return sendbackEvents;
