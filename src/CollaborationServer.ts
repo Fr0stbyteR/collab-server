@@ -14,11 +14,12 @@ export interface ILiveShareServerPrepended {
     joinRoom(clientId: string, ...args: Parameters<ILiveShareServer["joinRoom"]>): ReturnType<ILiveShareServer["joinRoom"]>;
     closeRoom(clientId: string, ...args: Parameters<ILiveShareServer["closeRoom"]>): ReturnType<ILiveShareServer["closeRoom"]>;
     requestChanges(clientId: string, ...args: Parameters<ILiveShareServer["requestChanges"]>): ReturnType<ILiveShareServer["requestChanges"]>;
+    updateState(clientId: string, ...args: Parameters<ILiveShareServer["updateState"]>): ReturnType<ILiveShareServer["updateState"]>;
 }
 
 export default class CollaborationServer extends ProxyServer<ILiveShareClient, ILiveShareServerPrepended> {
     static port = 18010;
-    static fnNames: (keyof ILiveShareClient)[] = ["ping", "roomClosedByOwner", "roomStateChanged", "changesFrom"];
+    static fnNames: (keyof ILiveShareClient)[] = ["ping", "roomClosedByOwner", "roomStateChanged", "changesFrom", "stateUpdateFrom"];
     static timeout = 5000;
     readonly rooms: Record<string, Room> = {};
     readonly nicknames: Record<string, string> = {};
@@ -203,5 +204,22 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
             this.changesFrom(socket, username, ...userEvents);
         });
         return sendbackEvents;
+    }
+    updateState(clientId: string, roomId: string, timestamp: number, state: Record<string, Record<string, any>>) {
+        const room = this.rooms[roomId];
+        if (!room) throw new Error(`No room ID: ${roomId}`);
+        const timeOffset = this.timeOffset[clientId];
+        if (typeof timeOffset !== "number") throw new Error(`User ${clientId} doesn't have a timeOffset`);
+        const username = this.nicknames[clientId];
+        if (typeof username !== "string") throw new Error(`No Username for ${clientId}`);
+        const t = timestamp + timeOffset;
+        if (t < room.objectStateTimestamp) return;
+        room.updateState(t, state);
+        room.clients.forEach((id) => {
+            if (id === clientId) return;
+            const socket = this._clients[id];
+            if (!socket) return;
+            this.stateUpdateFrom(socket, username, state);
+        });
     }
 }

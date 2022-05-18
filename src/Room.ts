@@ -10,6 +10,7 @@ export default class Room {
     project: LiveShareProject;
     owner: string;
     permission: "read" | "write" = "read";
+    objectStateTimestamp = Date.now();
     constructor(owner: string, id: string, password: string, server: CollaborationServer, permission: "read" | "write", project: LiveShareProject) {
         this.id = id;
         this.password = password;
@@ -22,6 +23,7 @@ export default class Room {
             const history = this.project.history[fileId];
             history.forEach(e => e.timestamp += ownerTimeOffset);
         }
+        this.objectStateTimestamp = Date.now();
         this.clients.add(owner);
     }
     getInfo(clientId: string): RoomInfo {
@@ -36,7 +38,7 @@ export default class Room {
                 selection: {},
                 cursor: null
             })),
-            userIsOwner: clientId === this.owner
+            ownerId: this.owner
         };
     }
     getPings() {
@@ -58,7 +60,7 @@ export default class Room {
                 const history = this.project.history[fileId];
                 const eventsToMerge = events.filter(e => e.fileId === fileId).sort((a, b) => a.timestamp - b.timestamp);
                 if (!eventsToMerge.length) continue;
-                if (history[history.length - 1].timestamp > eventsToMerge[0].timestamp) {
+                if (history.length && history[history.length - 1].timestamp > eventsToMerge[0].timestamp) {
                     unmerged.push(...eventsToMerge);
                     continue;
                 }
@@ -72,13 +74,21 @@ export default class Room {
         const history = this.project.history[fileId];
         if (!history) return null;
         const { length } = history;
+        if (!length) return { $: -1, length };
         const $ = history[length - 1].nextHistoryIndex;
-        return { $, length: history.length };
+        return { $, length };
     }
     transferOwnership(clientId: string, toClientId: string): RoomInfo {
         if (this.owner !== clientId) throw new Error(`Room is not owned by: ${clientId}`);
         if (!this.clients.has(clientId)) throw new Error(`Room does not have client: ${clientId}`);
         this.owner = toClientId;
         return this.getInfo(clientId);
+    }
+    updateState(timestamp: number, state: Record<string, Record<string, any>>) {
+        for (const fileId in state) {
+            if (!this.project.objectState[fileId]) this.project.objectState[fileId] = state[fileId];
+            else Object.assign(this.project.objectState[fileId], state[fileId]);
+        }
+        this.objectStateTimestamp = timestamp;
     }
 }

@@ -3,7 +3,12 @@ import ProxyServer from "./websocket/ProxyServer";
 
 export interface IServerInfo {
     upTime: number;
-    users: { id: string; nickname: string; ping: number }[];
+    users: {
+        id: string;
+        nickname: string;
+        ping: number;
+        timeOffset: number;
+    }[];
     rooms: {
         id: string;
         clients: string[];
@@ -34,7 +39,8 @@ export default class BackendServer extends ProxyServer<{}, IBackendServerPrepend
         const users = Object.keys(this.liveShareServer._clients).map(id => ({
             id,
             nickname: this.liveShareServer.nicknames[id],
-            ping: this.liveShareServer.pings[id]
+            ping: this.liveShareServer.pings[id],
+            timeOffset: this.liveShareServer.timeOffset[id]
         }));
         const rooms = Object.entries(this.liveShareServer.rooms).map(([id, room]) => ({
             id,
@@ -45,6 +51,7 @@ export default class BackendServer extends ProxyServer<{}, IBackendServerPrepend
                 path: item.path,
                 ...(item.isFolder === true ? {} : {
                     size: item.data.length,
+                    states: room.project.objectState[fileId] ? Object.keys(room.project.objectState[fileId]).length : 0,
                     ...room.getHistoryInfo(fileId)
                 })
             })),

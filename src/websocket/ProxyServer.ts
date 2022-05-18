@@ -54,12 +54,13 @@ const Server = class ProxyServer {
                         r.value = await (this as any)[call](clientId, ...args);
                     } catch (e) {
                         r.error = e.message;
+                        this._handleLog?.({ clientId, msg: `Err to \t[${clientId}]: \t${call.padEnd(20, " ")}\t${e.message}` });
                     }
                     const data = BSON.serialize(r);
                     this._handleLog?.({ clientId, msg: `Return to \t[${clientId}]: \t${call.padEnd(20, " ")}\t${data.byteLength} bytes` });
                     target.send(data);
                 } else {
-                    if (error) rejects[id]?.(new Error(error));
+                    if (error) this._handleLog?.({ clientId, msg: `Err from \t[${clientId}]: \t${error}` }); // rejects[id]?.(new Error(error));
                     else resolves[id]?.(value);
                     delete resolves[id];
                     delete rejects[id];

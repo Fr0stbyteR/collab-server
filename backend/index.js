@@ -62904,7 +62904,8 @@ const theme2 = createTheme({ palette: {
         columns: [
           { field: "id", headerName: "ID", width: 300 },
           { field: "nickname", headerName: "Nick name", width: 120 },
-          { field: "ping", headerName: "Ping", type: "number", width: 90 }
+          { field: "ping", headerName: "Ping", type: "number", width: 90 },
+          { field: "timeOffset", headerName: "Time Offset", width: 90, valueFormatter: (v) => msToTime(+v) }
         ]
       })), /* @__PURE__ */ React223.createElement(Grid_default, {
         item: true,
@@ -62919,7 +62920,8 @@ const theme2 = createTheme({ palette: {
           { field: "path", headerName: "Path", width: 150, valueFormatter: (v) => v.value.replace(/^\/project\//, "") || "." },
           { field: "size", headerName: "Size", type: "number", width: 90 },
           { field: "length", headerName: "Hist", type: "number", width: 90 },
-          { field: "$", headerName: "Cur", type: "number", width: 90 }
+          { field: "$", headerName: "Cur", type: "number", width: 90 },
+          { field: "states", headerName: "States", type: "number", width: 90 }
         ]
       }))));
     })) : void 0, errors ? /* @__PURE__ */ React223.createElement(Grid_default, {

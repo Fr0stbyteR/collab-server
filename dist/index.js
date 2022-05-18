@@ -7000,7 +7000,7 @@ var Server = (_a = class {
         }
       };
       const handleMessage = async (e) => {
-        var _a4, _b2, _c, _d;
+        var _a4, _b2, _c, _d, _e;
         const { target, data } = e;
         (_a4 = this._handleLog) == null ? void 0 : _a4.call(this, { clientId, msg: `Received from 	[${clientId}]: 	${"".padEnd(20, " ")}	${data.byteLength} bytes` });
         const { id, call: call2, args, value, error } = BSON.deserialize(data, { promoteBuffers: true });
@@ -7010,15 +7010,16 @@ var Server = (_a = class {
             r.value = await this[call2](clientId, ...args);
           } catch (e2) {
             r.error = e2.message;
+            (_b2 = this._handleLog) == null ? void 0 : _b2.call(this, { clientId, msg: `Err to 	[${clientId}]: 	${call2.padEnd(20, " ")}	${e2.message}` });
           }
           const data2 = BSON.serialize(r);
-          (_b2 = this._handleLog) == null ? void 0 : _b2.call(this, { clientId, msg: `Return to 	[${clientId}]: 	${call2.padEnd(20, " ")}	${data2.byteLength} bytes` });
+          (_c = this._handleLog) == null ? void 0 : _c.call(this, { clientId, msg: `Return to 	[${clientId}]: 	${call2.padEnd(20, " ")}	${data2.byteLength} bytes` });
           target.send(data2);
         } else {
           if (error)
-            (_c = rejects[id]) == null ? void 0 : _c.call(rejects, new Error(error));
+            (_d = this._handleLog) == null ? void 0 : _d.call(this, { clientId, msg: `Err from 	[${clientId}]: 	${error}` });
           else
-            (_d = resolves[id]) == null ? void 0 : _d.call(resolves, value);
+            (_e = resolves[id]) == null ? void 0 : _e.call(resolves, value);
           delete resolves[id];
           delete rejects[id];
         }
@@ -7072,7 +7073,8 @@ var BackendServer = class extends ProxyServer_default {
     const users = Object.keys(this.liveShareServer._clients).map((id) => ({
       id,
       nickname: this.liveShareServer.nicknames[id],
-      ping: this.liveShareServer.pings[id]
+      ping: this.liveShareServer.pings[id],
+      timeOffset: this.liveShareServer.timeOffset[id]
     }));
     const rooms = Object.entries(this.liveShareServer.rooms).map(([id, room]) => ({
       id,
@@ -7082,7 +7084,8 @@ var BackendServer = class extends ProxyServer_default {
         id: fileId,
         path: item.path
       }, item.isFolder === true ? {} : __spreadValues({
-        size: item.data.length
+        size: item.data.length,
+        states: room.project.objectState[fileId] ? Object.keys(room.project.objectState[fileId]).length : 0
       }, room.getHistoryInfo(fileId)))),
       permission: room.permission
     }));
@@ -7099,6 +7102,7 @@ var Room = class {
   constructor(owner, id, password, server2, permission, project) {
     this.clients = new Set();
     this.permission = "read";
+    this.objectStateTimestamp = Date.now();
     this.id = id;
     this.password = password;
     this.owner = owner;
@@ -7110,6 +7114,7 @@ var Room = class {
       const history = this.project.history[fileId];
       history.forEach((e) => e.timestamp += ownerTimeOffset);
     }
+    this.objectStateTimestamp = Date.now();
     this.clients.add(owner);
   }
   getInfo(clientId) {
@@ -7124,7 +7129,7 @@ var Room = class {
         selection: {},
         cursor: null
       })),
-      userIsOwner: clientId === this.owner
+      ownerId: this.owner
     };
   }
   getPings() {
@@ -7147,7 +7152,7 @@ var Room = class {
         const eventsToMerge = events.filter((e) => e.fileId === fileId).sort((a, b) => a.timestamp - b.timestamp);
         if (!eventsToMerge.length)
           continue;
-        if (history[history.length - 1].timestamp > eventsToMerge[0].timestamp) {
+        if (history.length && history[history.length - 1].timestamp > eventsToMerge[0].timestamp) {
           unmerged.push(...eventsToMerge);
           continue;
         }
@@ -7162,8 +7167,10 @@ var Room = class {
     if (!history)
       return null;
     const { length } = history;
+    if (!length)
+      return { $: -1, length };
     const $ = history[length - 1].nextHistoryIndex;
-    return { $, length: history.length };
+    return { $, length };
   }
   transferOwnership(clientId, toClientId) {
     if (this.owner !== clientId)
@@ -7172,6 +7179,15 @@ var Room = class {
       throw new Error(`Room does not have client: ${clientId}`);
     this.owner = toClientId;
     return this.getInfo(clientId);
+  }
+  updateState(timestamp, state) {
+    for (const fileId in state) {
+      if (!this.project.objectState[fileId])
+        this.project.objectState[fileId] = state[fileId];
+      else
+        Object.assign(this.project.objectState[fileId], state[fileId]);
+    }
+    this.objectStateTimestamp = timestamp;
   }
 };
 
@@ -7394,10 +7410,33 @@ var _CollaborationServer = class extends ProxyServer_default {
     });
     return sendbackEvents;
   }
+  updateState(clientId, roomId, timestamp, state) {
+    const room = this.rooms[roomId];
+    if (!room)
+      throw new Error(`No room ID: ${roomId}`);
+    const timeOffset = this.timeOffset[clientId];
+    if (typeof timeOffset !== "number")
+      throw new Error(`User ${clientId} doesn't have a timeOffset`);
+    const username = this.nicknames[clientId];
+    if (typeof username !== "string")
+      throw new Error(`No Username for ${clientId}`);
+    const t = timestamp + timeOffset;
+    if (t < room.objectStateTimestamp)
+      return;
+    room.updateState(t, state);
+    room.clients.forEach((id) => {
+      if (id === clientId)
+        return;
+      const socket = this._clients[id];
+      if (!socket)
+        return;
+      this.stateUpdateFrom(socket, username, state);
+    });
+  }
 };
 var CollaborationServer = _CollaborationServer;
 CollaborationServer.port = 18010;
-CollaborationServer.fnNames = ["ping", "roomClosedByOwner", "roomStateChanged", "changesFrom"];
+CollaborationServer.fnNames = ["ping", "roomClosedByOwner", "roomStateChanged", "changesFrom", "stateUpdateFrom"];
 CollaborationServer.timeout = 5e3;
 
 // src/index.ts
