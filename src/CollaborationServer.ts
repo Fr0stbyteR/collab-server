@@ -118,9 +118,9 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         // this.hearbeat(clientId);
         return clientId;
     }
-    hostRoom(clientId: string, roomId: string, password: string, timestamp: number, permission: "read" | "write", project: LiveShareProject) {
+    hostRoom(clientId: string, roomId: string, password: string, timestamp: number, permission: "read" | "write", project: LiveShareProject, currentProjectHash: string) {
         if (this.rooms[roomId]) throw Error("Room ID already exist.");
-        const room = new Room(clientId, roomId, password, this, permission, project);
+        const room = new Room(clientId, roomId, password, this, permission, project, currentProjectHash);
         this.rooms[room.id] = room;
         return { roomInfo: room.getInfo(clientId) };
     }
@@ -160,7 +160,7 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
         });
         return roomInfo;
     }
-    joinRoom(clientId: string, roomId: string, username: string, password: string, timestamp: number) {
+    joinRoom(clientId: string, roomId: string, username: string, password: string, timestamp: number, currentProjectHash: string) {
         const room = this.rooms[roomId];
         if (!room) throw new Error(`No room ID: ${roomId}`);
         if (password !== room.password) throw new Error("Room password incorrect.");
@@ -171,7 +171,9 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
             const socket = this._clients[id];
             if (socket) this.roomStateChanged(socket, room.getInfo(id));
         });
-        return { roomInfo, project: room.project };
+        const resp = { roomInfo, project: { ...room.project } };
+        if (currentProjectHash && currentProjectHash === room.projectHash) delete resp.project.items;
+        return resp;
     }
     closeRoom(clientId: string, roomId: string) {
         const room = this.rooms[roomId];

@@ -11,13 +11,15 @@ export default class Room {
     owner: string;
     permission: "read" | "write" = "read";
     objectStateTimestamp = Date.now();
-    constructor(owner: string, id: string, password: string, server: CollaborationServer, permission: "read" | "write", project: LiveShareProject) {
+    projectHash: string;
+    constructor(owner: string, id: string, password: string, server: CollaborationServer, permission: "read" | "write", project: LiveShareProject, projectHash: string) {
         this.id = id;
         this.password = password;
         this.owner = owner;
         this.server = server;
         this.permission = permission;
         this.project = project;
+        this.projectHash = projectHash;
         const ownerTimeOffset = +this.server.timeOffset[owner];
         for (const fileId in this.project.history) {
             const history = this.project.history[fileId];

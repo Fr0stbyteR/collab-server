@@ -7099,7 +7099,7 @@ BackendServer.port = 18011;
 
 // src/Room.ts
 var Room = class {
-  constructor(owner, id, password, server2, permission, project) {
+  constructor(owner, id, password, server2, permission, project, projectHash) {
     this.clients = new Set();
     this.permission = "read";
     this.objectStateTimestamp = Date.now();
@@ -7109,6 +7109,7 @@ var Room = class {
     this.server = server2;
     this.permission = permission;
     this.project = project;
+    this.projectHash = projectHash;
     const ownerTimeOffset = +this.server.timeOffset[owner];
     for (const fileId in this.project.history) {
       const history = this.project.history[fileId];
@@ -7299,10 +7300,10 @@ var _CollaborationServer = class extends ProxyServer_default {
     socket.addEventListener("close", handleClose);
     return clientId;
   }
-  hostRoom(clientId, roomId, password, timestamp, permission, project) {
+  hostRoom(clientId, roomId, password, timestamp, permission, project, currentProjectHash) {
     if (this.rooms[roomId])
       throw Error("Room ID already exist.");
-    const room = new Room(clientId, roomId, password, this, permission, project);
+    const room = new Room(clientId, roomId, password, this, permission, project, currentProjectHash);
     this.rooms[room.id] = room;
     return { roomInfo: room.getInfo(clientId) };
   }
@@ -7351,7 +7352,7 @@ var _CollaborationServer = class extends ProxyServer_default {
     });
     return roomInfo;
   }
-  joinRoom(clientId, roomId, username, password, timestamp) {
+  joinRoom(clientId, roomId, username, password, timestamp, currentProjectHash) {
     const room = this.rooms[roomId];
     if (!room)
       throw new Error(`No room ID: ${roomId}`);
@@ -7366,7 +7367,10 @@ var _CollaborationServer = class extends ProxyServer_default {
       if (socket)
         this.roomStateChanged(socket, room.getInfo(id));
     });
-    return { roomInfo, project: room.project };
+    const resp = { roomInfo, project: __spreadValues({}, room.project) };
+    if (currentProjectHash && currentProjectHash === room.projectHash)
+      delete resp.project.items;
+    return resp;
   }
   closeRoom(clientId, roomId) {
     const room = this.rooms[roomId];
