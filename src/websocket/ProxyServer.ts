@@ -3,7 +3,6 @@ import * as BSON from "bson";
 import type { WebSocketRequest, WebSocketResponse } from "@jspatcher/jspatcher/src/core/websocket/ProxyClient.types";
 import type { ProxyServer, WebSocketLog } from "./ProxyServer.types";
 import { uuid } from "../utils";
-import TimeoutError from "./TimeoutError";
 
 const Server = class ProxyServer {
     static port: number;

@@ -4,8 +4,8 @@ import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 import * as React from "react";
 import * as ReactDOM from "react-dom/client";
-import { Alert, Box, Container, Grid, TextField } from "@mui/material";
-import { DataGrid, GridColDef, GridValueGetterParams } from "@mui/x-data-grid";
+import { Alert, Box, Grid, TextField } from "@mui/material";
+import { DataGrid } from "@mui/x-data-grid";
 import BackendClient from "./BackendClient";
 import type { IServerInfo } from "./BackendServer";
 import { msToTime } from "./utils";
@@ -104,7 +104,7 @@ const App = () => {
                                 <Grid container direction="row" minHeight="300px">
                                     <Grid item xs={6}>
                                         <DataGrid
-                                            pageSize={5}
+                                            initialState={{ pagination: { pageSize: 5 } }}
                                             rowsPerPageOptions={[5, 10, 50, 100]}
                                             density="compact"
                                             rows={room.clients.map(clientId => serverInfo.users.find(({ id }) => id === clientId))}
@@ -118,7 +118,7 @@ const App = () => {
                                     </Grid>
                                     <Grid item xs={6}>
                                         <DataGrid
-                                            pageSize={5}
+                                            initialState={{ pagination: { pageSize: 5 } }}
                                             rowsPerPageOptions={[5, 10, 50, 100]}
                                             density="compact"
                                             rows={room.project}

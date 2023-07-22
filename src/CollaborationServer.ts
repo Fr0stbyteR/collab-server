@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { IHistoryEvent } from "@jspatcher/jspatcher/src/core/file/History";
 import type { ILiveShareServer, ILiveShareClient, LiveShareProject, RoomInfo } from "@jspatcher/jspatcher/src/core/LiveShareClient";
 import Room from "./Room";
@@ -27,9 +28,7 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
     readonly timeOffset: Record<string, number> = {};
     _handleLog = (log: WebSocketLog) => {
         const username = this.nicknames[log.clientId];
-        // eslint-disable-next-line no-console
         if (log.error) console.error(`[${username || "Server"}] \t${log.msg}`);
-        // eslint-disable-next-line no-console
         else console.log(`[${username || "Server"}] \t${log.msg}`);
     };
     logout = (clientId: string) => {

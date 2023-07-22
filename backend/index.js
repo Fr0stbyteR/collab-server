@@ -62895,7 +62895,7 @@ const theme2 = createTheme({ palette: {
         item: true,
         xs: 6
       }, /* @__PURE__ */ React223.createElement(DataGrid2, {
-        pageSize: 5,
+        initialState: { pagination: { pageSize: 5 } },
         rowsPerPageOptions: [5, 10, 50, 100],
         density: "compact",
         rows: room.clients.map((clientId) => serverInfo.users.find(({ id }) => id === clientId)),
@@ -62909,7 +62909,7 @@ const theme2 = createTheme({ palette: {
         item: true,
         xs: 6
       }, /* @__PURE__ */ React223.createElement(DataGrid2, {
-        pageSize: 5,
+        initialState: { pagination: { pageSize: 5 } },
         rowsPerPageOptions: [5, 10, 50, 100],
         density: "compact",
         rows: room.project,
