@@ -188,7 +188,7 @@ export default class CollaborationServer extends ProxyServer<ILiveShareClient, I
     async requestChanges(clientId: string, roomId: string, ...events: IHistoryEvent[]) {
         const room = this.rooms[roomId];
         if (!room) throw new Error(`No room ID: ${roomId}`);
-        if (room.permission !== "write") throw new Error(`Room ${roomId} doesn't have write permission`);
+        if (room.owner !== clientId && room.permission !== "write") throw new Error(`User ${clientId} doesn't have write permission`);
         const timeOffset = this.timeOffset[clientId];
         if (typeof timeOffset !== "number") throw new Error(`User ${clientId} doesn't have a timeOffset`);
         const username = this.nicknames[clientId];
