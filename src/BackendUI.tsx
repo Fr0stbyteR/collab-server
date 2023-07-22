@@ -90,10 +90,17 @@ const App = () => {
                         />
                         {serverInfo.rooms.map(room => (
                             <Grid key={room.id} container direction="row">
-                                <Grid item xs={2}>Room</Grid>
-                                <Grid item xs={4}>{room.id}</Grid>
-                                <Grid item xs={2}>{room.permission}</Grid>
-                                <Grid item xs={4}>{serverInfo.users.find(({ id }) => id === room.owner)?.nickname}</Grid>
+                                <DataGrid
+                                    hideFooter
+                                    autoHeight
+                                    density="compact"
+                                    rows={[{ id: room.id, permission: room.permission, owner: serverInfo.users.find(({ id }) => id === room.owner)?.nickname }]}
+                                    columns={[
+                                        { field: "id", headerName: "Room ID", width: 300 },
+                                        { field: "permission", headerName: "Permission", width: 90 },
+                                        { field: "owner", headerName: "Owner", width: 90 }
+                                    ]}
+                                />
                                 <Grid container direction="row" minHeight="300px">
                                     <Grid item xs={6}>
                                         <DataGrid

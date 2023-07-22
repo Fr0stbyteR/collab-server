@@ -62877,19 +62877,17 @@ const theme2 = createTheme({ palette: {
         key: room.id,
         container: true,
         direction: "row"
-      }, /* @__PURE__ */ React223.createElement(Grid_default, {
-        item: true,
-        xs: 2
-      }, "Room"), /* @__PURE__ */ React223.createElement(Grid_default, {
-        item: true,
-        xs: 4
-      }, room.id), /* @__PURE__ */ React223.createElement(Grid_default, {
-        item: true,
-        xs: 2
-      }, room.permission), /* @__PURE__ */ React223.createElement(Grid_default, {
-        item: true,
-        xs: 4
-      }, (_a2 = serverInfo.users.find(({ id }) => id === room.owner)) == null ? void 0 : _a2.nickname), /* @__PURE__ */ React223.createElement(Grid_default, {
+      }, /* @__PURE__ */ React223.createElement(DataGrid2, {
+        hideFooter: true,
+        autoHeight: true,
+        density: "compact",
+        rows: [{ id: room.id, permission: room.permission, owner: (_a2 = serverInfo.users.find(({ id }) => id === room.owner)) == null ? void 0 : _a2.nickname }],
+        columns: [
+          { field: "id", headerName: "Room ID", width: 300 },
+          { field: "permission", headerName: "Permission", width: 90 },
+          { field: "owner", headerName: "Owner", width: 90 }
+        ]
+      }), /* @__PURE__ */ React223.createElement(Grid_default, {
         container: true,
         direction: "row",
         minHeight: "300px"
